@@ -10,17 +10,20 @@ class LaunchAtLoginManager {
     
     var isEnabled: Bool {
         get {
-            // Check if app is in Login Items
-            guard let loginItems = SMCopyAllJobDictionaries(kSMDomainUserLaunchd).takeRetainedValue() as? [[String: Any]] else {
-                return false
-            }
+            // Check if app is in Login Items using AppleScript (more reliable)
+            let script = """
+            tell application "System Events"
+                get the name of every login item
+            end tell
+            """
             
-            let bundleURL = Bundle.main.bundleURL
-            for item in loginItems {
-                if let itemURL = item["ProgramArguments"] as? [String],
-                   let firstArg = itemURL.first,
-                   URL(fileURLWithPath: firstArg) == bundleURL {
-                    return true
+            if let appleScript = NSAppleScript(source: script) {
+                var error: NSDictionary?
+                if let result = appleScript.executeAndReturnError(&error), error == nil {
+                    if let loginItems = result.stringValue {
+                        let appName = Bundle.main.bundleURL.lastPathComponent
+                        return loginItems.contains(appName)
+                    }
                 }
             }
             return false
@@ -42,14 +45,11 @@ class LaunchAtLoginManager {
         // Alternative: Use LSRegisterURL and add to Login Items
         let bundleURL = Bundle.main.bundleURL as CFURL
         
-        // Get the app's bundle identifier
-        if let bundleID = Bundle.main.bundleIdentifier {
-            // Register the app
-            LSRegisterURL(bundleURL, true)
-            
-            // Add to Login Items using AppleScript (most reliable)
-            addToLoginItems()
-        }
+        // Register the app
+        LSRegisterURL(bundleURL, true)
+        
+        // Add to Login Items using AppleScript (most reliable)
+        addToLoginItems()
     }
     
     private func disableLaunchAtLogin() {
